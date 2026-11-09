@@ -1,31 +1,31 @@
 # Wanderlust Server
 
-Wanderlust-এর Express.js API backend। এটি MongoDB-তে destination ও booking-এর তথ্য সংরক্ষণ করে এবং Vercel serverless function হিসেবে deploy করা যায়।
+Wanderlust is an Express.js API backend that stores destination and booking data in MongoDB. It is configured to run as a Vercel serverless function.
 
-## প্রয়োজনীয়তা
+## Requirements
 
-- Node.js 18 বা পরবর্তী সংস্করণ
-- MongoDB database
-- Frontend থেকে JWT যাচাইয়ের জন্য JWKS endpoint
+- Node.js compatible with the dependencies in `package.json`
+- A MongoDB database
+- A frontend authentication service that exposes a JWKS endpoint at `/api/auth/jwks`
 
 ## Local development
 
-1. Dependencies install করুন:
+1. Install dependencies:
 
    ```bash
    npm install
    ```
 
-2. Project root-এ `.env` ফাইল তৈরি করে environment variables দিন:
+2. Create a `.env` file in the project root:
 
    ```env
    MONGODB_URL=mongodb+srv://<username>:<password>@<cluster>/<database>
-   CLIENT_URL=https://your-frontend-domain.example
+   CLIENT_URL=http://localhost:3000
    ```
 
-   `CLIENT_URL`-এ শেষে `/` দেবেন না। এই server `${CLIENT_URL}/api/auth/jwks` থেকে JWT public keys নেয়।
+   Replace the example values with your own. `CLIENT_URL` is the frontend origin, without a trailing slash. The server verifies JWTs using `${CLIENT_URL}/api/auth/jwks`.
 
-3. Vercel CLI দিয়ে development server চালান:
+3. Start the local Vercel development environment:
 
    ```bash
    npx vercel dev
@@ -33,44 +33,52 @@ Wanderlust-এর Express.js API backend। এটি MongoDB-তে destination
 
 ## Deploy to Vercel
 
-1. এই server folder-টিকে Vercel project-এর **Root Directory** হিসেবে নির্বাচন করুন।
-2. Vercel project settings-এর **Environment Variables**-এ `MONGODB_URL` ও `CLIENT_URL` যোগ করুন। যে environment-এ deploy করবেন (Production, Preview বা Development), সেটিতে variables-গুলো উপলভ্য আছে নিশ্চিত করুন।
-3. MongoDB Atlas ব্যবহার করলে database network access-এ Vercel function থেকে সংযোগ অনুমোদিত রাখুন।
-4. Vercel CLI দিয়ে deploy করুন:
+1. Set this server directory as the Vercel project's **Root Directory**.
+2. Add `MONGODB_URL` and `CLIENT_URL` under the Vercel project's **Environment Variables** for each environment you use (Production, Preview, and/or Development).
+   - `MONGODB_URL` must be a valid MongoDB connection string.
+   - `CLIENT_URL` must be the deployed frontend's origin, without a trailing slash, and must serve `/api/auth/jwks`.
+3. If you use MongoDB Atlas, configure its network access so the Vercel function can connect.
+4. Deploy with the Vercel CLI:
 
    ```bash
    npx vercel
    ```
 
-   Production deploy-এর জন্য:
+   To deploy to production:
 
    ```bash
    npx vercel --prod
    ```
 
-`vercel.json` সব request-কে `index.js` serverless function-এ route করে। Express app default export করা আছে; আলাদা `app.listen()` প্রয়োজন নেই। `.env`-এর secret মানগুলো Git-এ commit করবেন না।
+The `vercel.json` configuration routes requests to `index.js`. The Express application is exported for serverless use; it does not call `app.listen()`. Do not commit `.env` or put secrets in this README.
 
 ## API
 
-সব protected endpoint-এ `Authorization: Bearer <JWT>` header পাঠাতে হবে। JWT-টি `CLIENT_URL`-এর JWKS endpoint দিয়ে যাচাই করা হয়।
+All protected endpoints require a valid JWT in the `Authorization` header:
 
-| Method | Endpoint | বিবরণ | Authentication |
+```http
+Authorization: Bearer <JWT>
+```
+
+The token is verified against the JWKS endpoint at `${CLIENT_URL}/api/auth/jwks`.
+
+| Method | Endpoint | Description | Authentication |
 | --- | --- | --- | --- |
-| `GET` | `/` | Server health response | প্রয়োজন নেই |
-| `POST` | `/add_destination` | Destination যোগ করে | প্রয়োজন |
-| `GET` | `/destinations` | সব destination দেখায় | প্রয়োজন |
-| `GET` | `/destinations/:id` | ID দিয়ে destination দেখায় | প্রয়োজন |
-| `PUT` | `/destinations/:id` | Destination update করে | প্রয়োজন |
-| `DELETE` | `/destinations/:id` | Destination মুছে দেয় | প্রয়োজন |
-| `POST` | `/bookings` | Booking তৈরি করে | প্রয়োজন |
-| `GET` | `/bookings/:email` | Email অনুযায়ী booking দেখায় | প্রয়োজন |
-| `DELETE` | `/bookings/:id` | নিজের booking বাতিল করে | প্রয়োজন |
+| `GET` | `/` | Server health response | Not required |
+| `POST` | `/add_destination` | Create a destination | Required |
+| `GET` | `/destinations` | List all destinations | Required |
+| `GET` | `/destinations/:id` | Get a destination by ID | Required |
+| `PUT` | `/destinations/:id` | Update a destination | Required |
+| `DELETE` | `/destinations/:id` | Delete a destination | Required |
+| `POST` | `/bookings` | Create a booking | Required |
+| `GET` | `/bookings/:email` | List bookings for an email address | Required |
+| `DELETE` | `/bookings/:id` | Cancel a booking | Required |
 
-JSON body-যুক্ত request-এ `Content-Type: application/json` পাঠান। Destination update-এর জন্য `name`, `country`, `category`, `price`, ও `duration` প্রয়োজন। Booking বাতিলের request-এ JWT-এর পাশাপাশি `x-user-email` header দিতে হবে; শুধু ওই email-এর booking-ই মুছবে।
+For requests with a JSON body, send `Content-Type: application/json`. Updating a destination requires `name`, `country`, `category`, `price`, and `duration`. Cancelling a booking also requires the `x-user-email` header; the booking is deleted only when its stored email matches that value.
 
 ## Database
 
-API `wanderlust` database-এ নিচের collection ব্যবহার করে:
+The API uses the `wanderlust` database with these collections:
 
 - `destinations`
 - `bookings`
